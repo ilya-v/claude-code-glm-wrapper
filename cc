@@ -32,18 +32,19 @@ read_dotenv() {
   printf '%s' "$val"
 }
 
-TOKEN="${ZAI_API_KEY:-}"
-if [ -z "$TOKEN" ]; then TOKEN=$(read_dotenv ZAI_API_KEY "$CWD/.env");  fi
-if [ -z "$TOKEN" ]; then TOKEN=$(read_dotenv ZAI_API_KEY "$HOME/.env"); fi
-if [ -z "$TOKEN" ] && [ -r "$DIR/zai.key"    ]; then TOKEN=$(< "$DIR/zai.key");    fi
-if [ -z "$TOKEN" ] && [ -r "$DIR/../zai.key" ]; then TOKEN=$(< "$DIR/../zai.key"); fi
-if [ -z "$TOKEN" ]; then
+: "${ZAI_API_KEY:=}"
+if [ -z "$ZAI_API_KEY" ]; then ZAI_API_KEY=$(read_dotenv ZAI_API_KEY "$CWD/.env");  fi
+if [ -z "$ZAI_API_KEY" ]; then ZAI_API_KEY=$(read_dotenv ZAI_API_KEY "$HOME/.env"); fi
+if [ -z "$ZAI_API_KEY" ] && [ -r "$DIR/zai.key"    ]; then ZAI_API_KEY=$(< "$DIR/zai.key");    fi
+if [ -z "$ZAI_API_KEY" ] && [ -r "$DIR/../zai.key" ]; then ZAI_API_KEY=$(< "$DIR/../zai.key"); fi
+if [ -z "$ZAI_API_KEY" ]; then
   echo "cc: no z.ai API key found. Set \$ZAI_API_KEY, add ZAI_API_KEY=... to ./.env or ~/.env, or create $DIR/zai.key (or $DIR/../zai.key)." >&2
   exit 1
 fi
+export ZAI_API_KEY
 
 export ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic
-export ANTHROPIC_AUTH_TOKEN="$TOKEN"
+export ANTHROPIC_AUTH_TOKEN="$ZAI_API_KEY"
 export ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.1
 export ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5.1
 export ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.5-air
