@@ -2,8 +2,8 @@
 # Launch Claude Code wired to z.ai's Anthropic-compatible GLM-5.1 endpoint.
 #
 # Per-launch setup:
-#   ./.claude/cc-prompt.md                       — rendered system prompt (template substituted)
-#   ~/.claude/projects/<cwd-slug>/memory/        — auto-memory dir, same path CC uses natively
+#   ./.claude/cc-prompt.md                 — rendered system prompt (template substituted)
+#   ~/.claude/projects/<cwd-slug>/memory/  — auto-memory dir
 set -eu
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CWD="$(pwd -P)"
@@ -20,11 +20,15 @@ read_dotenv() {
   line=$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" "$2" 2>/dev/null | tail -n1) || true
   [ -n "$line" ] || return 0
   val=${line#*=}
+  val=${val%$'\r'}                             # CRLF line endings
+  val=${val#"${val%%[![:space:]]*}"}           # strip leading whitespace
+  val=${val%"${val##*[![:space:]]}"}           # strip trailing whitespace
+  # After outside-quote whitespace is gone, strip one layer of matching quotes
+  # (anything inside the quotes is kept verbatim, including spaces).
   case "$val" in
     \"*\") val=${val#\"}; val=${val%\"} ;;
     \'*\') val=${val#\'}; val=${val%\'} ;;
   esac
-  val=${val%$'\r'}
   printf '%s' "$val"
 }
 
@@ -60,8 +64,6 @@ export CLAUDE_CODE_DISABLE_THINKING=1
 # implement, so sending them is pointless at best.
 export CLAUDE_CODE_SIMULATE_PROXY_USAGE=1
 
-# Memory dir: match the path native CC computes, so entries written via the
-# wrapper end up alongside entries from plain `claude` runs in the same project.
 SLUG="$(echo "$CWD" | sed 's|/|-|g')"           # e.g. /path/to/proj -> -path-to-proj
 MEM_DIR="$HOME/.claude/projects/$SLUG/memory"
 RENDERED_PROMPT="$CWD/.claude/cc-prompt.md"
