@@ -38,18 +38,18 @@ Claude Code would otherwise derive itself.
 ## Setup
 
 1. Install Claude Code: `npm install -g @anthropic-ai/claude-code`
-2. Get a z.ai API key from <https://z.ai> and make it available to `cc` via any of the options below.
-3. Make `cc` executable: `chmod +x cc`
+2. Get a z.ai API key from <https://z.ai> and make it available to `cc-glm` via any of the options below.
+3. Make `cc-glm` executable: `chmod +x cc-glm`
 4. Run it from any project directory:
 
    ```bash
-   /path/to/claude-code-glm-wrapper/cc
+   /path/to/claude-code-glm-wrapper/cc-glm
    ```
 
 The launcher creates `./.claude/cc-prompt.md` (rendered system prompt) and
 `./.claude/memory/` (auto-memory base) inside whatever directory you run it from.
 
-### How `cc` finds your z.ai API key
+### How `cc-glm` finds your z.ai API key
 
 Checked in order, first hit wins:
 
@@ -58,14 +58,14 @@ Checked in order, first hit wins:
 | 1 | `$ZAI_API_KEY` in the environment | `export ZAI_API_KEY=sk-...` in your shell |
 | 2 | `./.env` in the current working directory | `ZAI_API_KEY=sk-...` |
 | 3 | `~/.env` in your home directory | `ZAI_API_KEY=sk-...` |
-| 4 | `zai.key` next to the `cc` script | key on a single line, no `KEY=` prefix |
+| 4 | `zai.key` next to the `cc-glm` script | key on a single line, no `KEY=` prefix |
 | 5 | `zai.key` one directory above the script | same format — lets sibling launchers share one key file |
 
-If none of them yield a non-empty value, `cc` exits with an error.
+If none of them yield a non-empty value, `cc-glm` exits with an error.
 
 **`.env` parsing is minimal**: `ZAI_API_KEY=value`, `ZAI_API_KEY="value"`, `ZAI_API_KEY='value'`,
 with an optional leading `export `. No inline comments, no variable interpolation, no multi-line
-values. Any other content in the `.env` file is ignored — `cc` only looks for the `ZAI_API_KEY` line.
+values. Any other content in the `.env` file is ignored — `cc-glm` only looks for the `ZAI_API_KEY` line.
 
 `zai.key`, `.env`, and `.claude/` are gitignored — they will never be committed.
 
@@ -73,7 +73,7 @@ values. Any other content in the `.env` file is ignored — `cc` only looks for 
 
 | File | Purpose |
 |---|---|
-| `cc` | The launcher script |
+| `cc-glm` | The launcher script |
 | `claude-code-glm-prompt.md` | System prompt template (GLM-tuned, with `{{MEMORY_DIR}}` placeholder) |
 | `claude-code-with-glm.md` | Detailed write-up of the env vars, why each is needed, and how to verify |
 

@@ -38,7 +38,7 @@ if [ -z "$ZAI_API_KEY" ]; then ZAI_API_KEY=$(read_dotenv ZAI_API_KEY "$HOME/.env
 if [ -z "$ZAI_API_KEY" ] && [ -r "$SCRIPT_DIR/zai.key"    ]; then ZAI_API_KEY=$(< "$SCRIPT_DIR/zai.key");    fi
 if [ -z "$ZAI_API_KEY" ] && [ -r "$SCRIPT_DIR/../zai.key" ]; then ZAI_API_KEY=$(< "$SCRIPT_DIR/../zai.key"); fi
 if [ -z "$ZAI_API_KEY" ]; then
-  echo "cc: no z.ai API key found. Set \$ZAI_API_KEY, add ZAI_API_KEY=... to ./.env or ~/.env, or create $SCRIPT_DIR/zai.key (or $SCRIPT_DIR/../zai.key)." >&2
+  echo "cc-glm: no z.ai API key found. Set \$ZAI_API_KEY, add ZAI_API_KEY=... to ./.env or ~/.env, or create $SCRIPT_DIR/zai.key (or $SCRIPT_DIR/../zai.key)." >&2
   exit 1
 fi
 export ZAI_API_KEY
