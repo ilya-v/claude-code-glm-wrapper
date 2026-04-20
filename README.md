@@ -38,7 +38,7 @@ Claude Code would otherwise derive itself.
 ## Setup
 
 1. Install Claude Code: `npm install -g @anthropic-ai/claude-code`
-2. Get a z.ai API key from <https://z.ai> and drop it in a file named `zai.key` next to `cc` (one line, just the key).
+2. Get a z.ai API key from <https://z.ai> and make it available to `cc` via any of the options below.
 3. Make `cc` executable: `chmod +x cc`
 4. Run it from any project directory:
 
@@ -49,7 +49,25 @@ Claude Code would otherwise derive itself.
 The launcher creates `./.claude/cc-prompt.md` (rendered system prompt) and
 `./.claude/memory/` (auto-memory base) inside whatever directory you run it from.
 
-`zai.key` is gitignored — it will never be committed.
+### How `cc` finds your z.ai API key
+
+Checked in order, first hit wins:
+
+| # | Source | Example |
+|---|---|---|
+| 1 | `$ZAI_API_KEY` in the environment | `export ZAI_API_KEY=sk-...` in your shell |
+| 2 | `./.env` in the current working directory | `ZAI_API_KEY=sk-...` |
+| 3 | `~/.env` in your home directory | `ZAI_API_KEY=sk-...` |
+| 4 | `zai.key` next to the `cc` script | key on a single line, no `KEY=` prefix |
+| 5 | `zai.key` one directory above the script | same format — lets sibling launchers share one key file |
+
+If none of them yield a non-empty value, `cc` exits with an error.
+
+**`.env` parsing is minimal**: `ZAI_API_KEY=value`, `ZAI_API_KEY="value"`, `ZAI_API_KEY='value'`,
+with an optional leading `export `. No inline comments, no variable interpolation, no multi-line
+values. Any other content in the `.env` file is ignored — `cc` only looks for the `ZAI_API_KEY` line.
+
+`zai.key`, `.env`, and `.claude/` are gitignored — they will never be committed.
 
 ## Files
 

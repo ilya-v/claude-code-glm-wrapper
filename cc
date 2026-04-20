@@ -8,15 +8,42 @@ set -eu
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CWD="$(pwd -P)"
 
-# Locate the z.ai key file: next to this script, or one level up
-# (so the same key can be shared with sibling launchers).
-if   [ -r "$DIR/zai.key" ];    then KEY_FILE="$DIR/zai.key"
-elif [ -r "$DIR/../zai.key" ]; then KEY_FILE="$DIR/../zai.key"
-else echo "cc: zai.key not found in $DIR or $DIR/.." >&2; exit 1
+# Resolve the z.ai API key. Precedence (first hit wins):
+#   1. $ZAI_API_KEY in the environment
+#   2. ZAI_API_KEY=... in ./.env   (current working directory)
+#   3. ZAI_API_KEY=... in ~/.env
+#   4. ./zai.key next to this script
+#   5. ../zai.key (so sibling launchers can share one key file)
+#
+# .env parsing is deliberately minimal: `KEY=value`, `KEY="value"`, `KEY='value'`,
+# optional leading `export `. No inline comments, no variable interpolation.
+read_dotenv() {
+  # $1=var-name  $2=file  →  stdout = value (empty if not found)
+  [ -r "$2" ] || return 0
+  local line val
+  line=$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" "$2" 2>/dev/null | tail -n1) || true
+  [ -n "$line" ] || return 0
+  val=${line#*=}
+  case "$val" in
+    \"*\") val=${val#\"}; val=${val%\"} ;;
+    \'*\') val=${val#\'}; val=${val%\'} ;;
+  esac
+  val=${val%$'\r'}
+  printf '%s' "$val"
+}
+
+TOKEN="${ZAI_API_KEY:-}"
+if [ -z "$TOKEN" ]; then TOKEN=$(read_dotenv ZAI_API_KEY "$CWD/.env");  fi
+if [ -z "$TOKEN" ]; then TOKEN=$(read_dotenv ZAI_API_KEY "$HOME/.env"); fi
+if [ -z "$TOKEN" ] && [ -r "$DIR/zai.key"    ]; then TOKEN=$(< "$DIR/zai.key");    fi
+if [ -z "$TOKEN" ] && [ -r "$DIR/../zai.key" ]; then TOKEN=$(< "$DIR/../zai.key"); fi
+if [ -z "$TOKEN" ]; then
+  echo "cc: no z.ai API key found. Set \$ZAI_API_KEY, add ZAI_API_KEY=... to ./.env or ~/.env, or create $DIR/zai.key (or $DIR/../zai.key)." >&2
+  exit 1
 fi
 
 export ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic
-export ANTHROPIC_AUTH_TOKEN="$(< "$KEY_FILE")"
+export ANTHROPIC_AUTH_TOKEN="$TOKEN"
 export ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.1
 export ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5.1
 export ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.5-air
