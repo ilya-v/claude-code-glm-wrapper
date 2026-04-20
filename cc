@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Launch Claude Code wired to z.ai's Anthropic-compatible GLM-5.1 endpoint.
 #
-# Per-launch setup, all under ./.claude/ in the current working directory:
-#   ./.claude/cc-prompt.md    — rendered system prompt (template substituted)
-#   ./.claude/memory/         — auto-memory base (CC adds projects/<slug>/memory/ underneath)
+# Per-launch setup:
+#   ./.claude/cc-prompt.md                       — rendered system prompt (template substituted)
+#   ~/.claude/projects/<cwd-slug>/memory/        — auto-memory dir, same path CC uses natively
 set -eu
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CWD="$(pwd -P)"
@@ -60,16 +60,15 @@ export CLAUDE_CODE_DISABLE_THINKING=1
 # Relevant for us because z.ai's Anthropic shim doesn't implement Anthropic-internal betas.
 export CLAUDE_CODE_SIMULATE_PROXY_USAGE=1
 
-# Compute paths
-MEM_BASE="$CWD/.claude/memory"                  # CLAUDE_CODE_REMOTE_MEMORY_DIR base
-SLUG="$(echo "$CWD" | sed 's|/|-|g')"           # e.g. /path/to/proj -> -path-to-proj  (CC's slug rule)
-MEM_RESOLVED="$MEM_BASE/projects/$SLUG/memory"  # the path CC actually writes/reads
+# Compute the memory dir exactly the way native CC does:
+# $HOME/.claude/projects/<cwd-with-slashes-replaced-by-dashes>/memory
+SLUG="$(echo "$CWD" | sed 's|/|-|g')"           # e.g. /path/to/proj -> -path-to-proj
+MEM_DIR="$HOME/.claude/projects/$SLUG/memory"
 RENDERED_PROMPT="$CWD/.claude/cc-prompt.md"
 
-mkdir -p "$MEM_RESOLVED" "$(dirname "$RENDERED_PROMPT")"
+mkdir -p "$MEM_DIR" "$(dirname "$RENDERED_PROMPT")"
 
 # Render the prompt template — substitute {{MEMORY_DIR}} with the resolved deep path
-sed "s|{{MEMORY_DIR}}|$MEM_RESOLVED|g" "$DIR/claude-code-glm-prompt.md" > "$RENDERED_PROMPT"
+sed "s|{{MEMORY_DIR}}|$MEM_DIR|g" "$DIR/claude-code-glm-prompt.md" > "$RENDERED_PROMPT"
 
-export CLAUDE_CODE_REMOTE_MEMORY_DIR="$MEM_BASE"
 exec claude --system-prompt-file "$RENDERED_PROMPT" --disallowed-tools Skill "$@"
