@@ -5,11 +5,11 @@
 #   ./.claude/cc-prompt.md                       — rendered system prompt (template substituted)
 #   ~/.claude/projects/<cwd-slug>/memory/        — auto-memory dir, same path CC uses natively
 set -eu
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CWD="$(pwd -P)"
 
 # z.ai API key lookup, first match wins:
-#   $ZAI_API_KEY  →  ./.env  →  ~/.env  →  $DIR/zai.key  →  $DIR/../zai.key
+#   $ZAI_API_KEY  →  ./.env  →  ~/.env  →  $SCRIPT_DIR/zai.key  →  $SCRIPT_DIR/../zai.key
 # The "one level up" fallback lets sibling launchers share a single key file.
 #
 # We extract the ZAI_API_KEY= line from .env with grep rather than `source`ing
@@ -31,10 +31,10 @@ read_dotenv() {
 : "${ZAI_API_KEY:=}"
 if [ -z "$ZAI_API_KEY" ]; then ZAI_API_KEY=$(read_dotenv ZAI_API_KEY "$CWD/.env");  fi
 if [ -z "$ZAI_API_KEY" ]; then ZAI_API_KEY=$(read_dotenv ZAI_API_KEY "$HOME/.env"); fi
-if [ -z "$ZAI_API_KEY" ] && [ -r "$DIR/zai.key"    ]; then ZAI_API_KEY=$(< "$DIR/zai.key");    fi
-if [ -z "$ZAI_API_KEY" ] && [ -r "$DIR/../zai.key" ]; then ZAI_API_KEY=$(< "$DIR/../zai.key"); fi
+if [ -z "$ZAI_API_KEY" ] && [ -r "$SCRIPT_DIR/zai.key"    ]; then ZAI_API_KEY=$(< "$SCRIPT_DIR/zai.key");    fi
+if [ -z "$ZAI_API_KEY" ] && [ -r "$SCRIPT_DIR/../zai.key" ]; then ZAI_API_KEY=$(< "$SCRIPT_DIR/../zai.key"); fi
 if [ -z "$ZAI_API_KEY" ]; then
-  echo "cc: no z.ai API key found. Set \$ZAI_API_KEY, add ZAI_API_KEY=... to ./.env or ~/.env, or create $DIR/zai.key (or $DIR/../zai.key)." >&2
+  echo "cc: no z.ai API key found. Set \$ZAI_API_KEY, add ZAI_API_KEY=... to ./.env or ~/.env, or create $SCRIPT_DIR/zai.key (or $SCRIPT_DIR/../zai.key)." >&2
   exit 1
 fi
 export ZAI_API_KEY
@@ -68,9 +68,9 @@ RENDERED_PROMPT="$CWD/.claude/cc-prompt.md"
 
 mkdir -p "$MEM_DIR" "$(dirname "$RENDERED_PROMPT")"
 
-# The prompt references an absolute memory path, which isn't known until launch
-# time. CC doesn't expand variables in --system-prompt-file content, so bake the
-# resolved path into a per-project rendered copy ourselves.
-sed "s|{{MEMORY_DIR}}|$MEM_DIR|g" "$DIR/claude-code-glm-prompt.md" > "$RENDERED_PROMPT"
+# The prompt references an absolute memory path that depends on $HOME and $CWD,
+# so it isn't known until launch. Substitute {{MEMORY_DIR}} here into a
+# per-project rendered copy, then hand that file to claude.
+sed "s|{{MEMORY_DIR}}|$MEM_DIR|g" "$SCRIPT_DIR/claude-code-glm-prompt.md" > "$RENDERED_PROMPT"
 
 exec claude --system-prompt-file "$RENDERED_PROMPT" --disallowed-tools Skill "$@"

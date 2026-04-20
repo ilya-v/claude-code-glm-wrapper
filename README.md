@@ -11,7 +11,7 @@ rather than Claude.
 ## Why the extra env vars?
 
 Claude Code's default request body carries features that z.ai's Anthropic-compatible
-shim silently ignores or chokes on:
+shim doesn't implement:
 
 - `thinking: {type: "enabled", budget_tokens: N}` — GLM's shim doesn't honor it.
 - `anthropic-beta:` headers (`effort-*`, `interleaved-thinking-*`, `context-1m-*`, …) — Anthropic-internal, not implemented by z.ai.
