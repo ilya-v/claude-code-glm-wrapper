@@ -20,11 +20,19 @@ import (
 	"strings"
 )
 
+const (
+	defaultPort      = "8765"                          // arbitrary unprivileged port; fixed so parallel cc-glm launches fail visibly rather than silently racing
+	defaultUpstream  = "https://api.z.ai/api/anthropic" // only Anthropic-compat endpoint we currently care about
+	defaultTemp      = 0.2                             // z.ai's own guidance for deterministic reasoning (docs.z.ai/guides/overview/concept-param)
+	defaultMaxTokens = 131072                          // z.ai-documented GLM-5.1 output ceiling
+	ccClampCeiling   = 128000                          // value CC's Ka() falls back to for unknown models — the only max_tokens we rewrite
+)
+
 func main() {
-	port := flag.String("port", "8765", "listen port (bound to 127.0.0.1)")
-	target := flag.String("target", "https://api.z.ai/api/anthropic", "upstream URL")
-	temp := flag.Float64("temperature", 0.2, "value to substitute for body.temperature")
-	maxTok := flag.Int("max-tokens", 131072, "raise body.max_tokens to this when it equals 128000")
+	port := flag.String("port", defaultPort, "listen port (bound to 127.0.0.1)")
+	target := flag.String("target", defaultUpstream, "upstream URL")
+	temp := flag.Float64("temperature", defaultTemp, "value to substitute for body.temperature")
+	maxTok := flag.Int("max-tokens", defaultMaxTokens, "raise body.max_tokens to this when it equals CC's clamp ceiling")
 	flag.Parse()
 
 	upstream, err := url.Parse(*target)
@@ -70,10 +78,10 @@ func rewrite(body []byte, temp float64, maxTok int) ([]byte, bool) {
 		obj["temperature"] = temp
 		changed = true
 	}
-	// Only bump max_tokens when it's saturated at CC's 128000 ceiling.
+	// Only bump max_tokens when it's saturated at CC's clamp ceiling.
 	// Lower values come from internal CC calls (title gen etc.) that
-	// deliberately ask for short responses.
-	if cur, ok := obj["max_tokens"].(float64); ok && int(cur) == 128000 && maxTok > 128000 {
+	// deliberately ask for short responses — leave those alone.
+	if cur, ok := obj["max_tokens"].(float64); ok && int(cur) == ccClampCeiling && maxTok > ccClampCeiling {
 		obj["max_tokens"] = float64(maxTok)
 		changed = true
 	}

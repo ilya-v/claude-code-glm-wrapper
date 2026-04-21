@@ -54,6 +54,11 @@ UPSTREAM=https://api.z.ai/api/anthropic
 PROXY_PID=
 export ANTHROPIC_BASE_URL="$UPSTREAM"
 
+# Proxy settings. PROXY_PORT matches defaultPort in cc-glm-proxy.go — keep in sync.
+PROXY_PORT=8765                                   # fixed so parallel cc-glm launches fail visibly
+PROXY_BIND_TRIES=10                               # attempts × interval = total bind-wait budget
+PROXY_BIND_INTERVAL=0.1                           # seconds
+
 start_proxy() {
   if ! command -v go >/dev/null 2>&1; then
     echo "cc-glm: Go toolchain not on PATH — running without proxy (temperature stays at CC's 1, max_tokens at 128000)" >&2
@@ -63,7 +68,6 @@ start_proxy() {
   local bin="$SCRIPT_DIR/.cc-glm-proxy"
   local log="$SCRIPT_DIR/.cc-glm-proxy.log"
   local buildlog="$SCRIPT_DIR/.cc-glm-proxy.build.log"
-  local port=8765
   [ -r "$src" ] || return
   # Rebuild if the binary is missing or the source is newer. Combining the
   # "needs build?" check with the build attempt keeps this as a single guard.
@@ -72,20 +76,20 @@ start_proxy() {
     echo "cc-glm: proxy build failed — see $buildlog; continuing without proxy" >&2
     return
   fi
-  "$bin" -port="$port" -target="$UPSTREAM" > "$log" 2>&1 &
+  "$bin" -port="$PROXY_PORT" -target="$UPSTREAM" > "$log" 2>&1 &
   PROXY_PID=$!
-  # Wait up to ~1s for the listening socket to come up
+  # Wait for the listening socket (up to PROXY_BIND_TRIES × PROXY_BIND_INTERVAL)
   local i
-  for i in 1 2 3 4 5 6 7 8 9 10; do
-    (echo > /dev/tcp/localhost/"$port") 2>/dev/null && break
-    sleep 0.1
+  for i in $(seq "$PROXY_BIND_TRIES"); do
+    (echo > /dev/tcp/localhost/"$PROXY_PORT") 2>/dev/null && break
+    sleep "$PROXY_BIND_INTERVAL"
   done
   if ! kill -0 "$PROXY_PID" 2>/dev/null; then
     echo "cc-glm: proxy failed to start — see $log; continuing without proxy" >&2
     PROXY_PID=
     return
   fi
-  export ANTHROPIC_BASE_URL="http://localhost:$port"
+  export ANTHROPIC_BASE_URL="http://localhost:$PROXY_PORT"
   trap 'kill "$PROXY_PID" 2>/dev/null' EXIT
 }
 start_proxy
