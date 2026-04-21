@@ -32,9 +32,21 @@ read_dotenv() {
   printf '%s' "$val"
 }
 
+# resolve_setting NAME DEFAULT
+# Look up a config value, first hit wins:
+#   $NAME in the environment  →  ./.env  →  ~/.env  →  DEFAULT
+# Writes the result back into $NAME.
+resolve_setting() {
+  local name="$1" default="$2" current
+  current="${!name:-}"
+  [ -n "$current" ] || current=$(read_dotenv "$name" "$CWD/.env")
+  [ -n "$current" ] || current=$(read_dotenv "$name" "$HOME/.env")
+  [ -n "$current" ] || current="$default"
+  printf -v "$name" '%s' "$current"
+}
+
 : "${ZAI_API_KEY:=}"
-if [ -z "$ZAI_API_KEY" ]; then ZAI_API_KEY=$(read_dotenv ZAI_API_KEY "$CWD/.env");  fi
-if [ -z "$ZAI_API_KEY" ]; then ZAI_API_KEY=$(read_dotenv ZAI_API_KEY "$HOME/.env"); fi
+resolve_setting ZAI_API_KEY ""
 if [ -z "$ZAI_API_KEY" ] && [ -r "$SCRIPT_DIR/zai.key"    ]; then ZAI_API_KEY=$(< "$SCRIPT_DIR/zai.key");    fi
 if [ -z "$ZAI_API_KEY" ] && [ -r "$SCRIPT_DIR/../zai.key" ]; then ZAI_API_KEY=$(< "$SCRIPT_DIR/../zai.key"); fi
 if [ -z "$ZAI_API_KEY" ]; then
@@ -42,6 +54,12 @@ if [ -z "$ZAI_API_KEY" ]; then
   exit 1
 fi
 export ZAI_API_KEY
+
+# Proxy rewrite values. Same env/.env/~/.env lookup as the API key; defaults
+# baked in here. z.ai recommends ~0.2 for deterministic reasoning; 131072 is
+# the documented GLM-5.1 output cap.
+resolve_setting CC_GLM_TEMPERATURE 0.2
+resolve_setting CC_GLM_MAX_TOKENS  131072
 
 export ANTHROPIC_AUTH_TOKEN="$ZAI_API_KEY"
 
@@ -76,7 +94,9 @@ start_proxy() {
     echo "cc-glm: proxy build failed — see $buildlog; continuing without proxy" >&2
     return
   fi
-  "$bin" -port="$PROXY_PORT" -target="$UPSTREAM" > "$log" 2>&1 &
+  "$bin" -port="$PROXY_PORT" -target="$UPSTREAM" \
+         -temperature="$CC_GLM_TEMPERATURE" -max-tokens="$CC_GLM_MAX_TOKENS" \
+         > "$log" 2>&1 &
   PROXY_PID=$!
   # Wait for the listening socket (up to PROXY_BIND_TRIES × PROXY_BIND_INTERVAL)
   local i

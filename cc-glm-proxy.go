@@ -78,10 +78,12 @@ func rewrite(body []byte, temp float64, maxTok int) ([]byte, bool) {
 		obj["temperature"] = temp
 		changed = true
 	}
-	// Only bump max_tokens when it's saturated at CC's clamp ceiling.
-	// Lower values come from internal CC calls (title gen etc.) that
-	// deliberately ask for short responses — leave those alone.
-	if cur, ok := obj["max_tokens"].(float64); ok && int(cur) == ccClampCeiling && maxTok > ccClampCeiling {
+	// Substitute max_tokens only when it's saturated at CC's clamp ceiling —
+	// that's how we distinguish the main request from internal CC calls (title
+	// generation, model validation) that deliberately ask for short responses.
+	// The user-configured value wins whether it's higher or lower than the
+	// ceiling; equal is a no-op.
+	if cur, ok := obj["max_tokens"].(float64); ok && int(cur) == ccClampCeiling && int(cur) != maxTok {
 		obj["max_tokens"] = float64(maxTok)
 		changed = true
 	}

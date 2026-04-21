@@ -81,11 +81,23 @@ any CLI flag, env var, or settings key (verified by reverse-engineering the bina
 If the `go` compiler is on your `PATH`, `cc-glm` builds a tiny reverse proxy
 (`cc-glm-proxy.go`, ~90 lines) on first run, launches it at `127.0.0.1:8765`,
 points `ANTHROPIC_BASE_URL` at it, and tears it down on exit. The proxy rewrites
-`temperature` to `0.2` on every `/v1/messages` POST and bumps `max_tokens` from
-`128000` to `131072` (smaller values from internal CC calls are left alone).
+`temperature` on every `/v1/messages` POST and bumps `max_tokens` from
+`128000` to the configured ceiling (smaller values from internal CC calls are
+left alone).
 
 If `go` is missing, `cc-glm` prints a warning and talks to z.ai directly — calls
 still work, just with CC's defaults.
+
+### Tuning the proxy
+
+`CC_GLM_TEMPERATURE` and `CC_GLM_MAX_TOKENS` follow the same lookup as
+`ZAI_API_KEY` (env var → `./.env` → `~/.env` → built-in default). Defaults: `0.2`
+and `131072`.
+
+```bash
+CC_GLM_TEMPERATURE=0.1 /path/to/cc-glm              # one-shot override
+echo 'CC_GLM_TEMPERATURE=0.1' >> ~/.env              # persistent per-user
+```
 
 ## Files
 
