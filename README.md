@@ -69,11 +69,30 @@ values. Any other content in the `.env` file is ignored — `cc-glm` only looks 
 
 `zai.key`, `.env`, and `.claude/` are gitignored — they will never be committed.
 
+## Optional local proxy (if Go is installed)
+
+Two body fields Claude Code 2.1.x bakes into every request can't be overridden via
+any CLI flag, env var, or settings key (verified by reverse-engineering the binary):
+
+- `temperature: 1` — CC hardcodes it to `1`; GLM reasons more reliably at ~`0.2`.
+- `max_tokens: 128000` — CC's hardcoded cap for non-Claude models; z.ai documents
+  GLM-5.1's actual cap as `131072`.
+
+If the `go` compiler is on your `PATH`, `cc-glm` builds a tiny reverse proxy
+(`cc-glm-proxy.go`, ~90 lines) on first run, launches it at `127.0.0.1:8765`,
+points `ANTHROPIC_BASE_URL` at it, and tears it down on exit. The proxy rewrites
+`temperature` to `0.2` on every `/v1/messages` POST and bumps `max_tokens` from
+`128000` to `131072` (smaller values from internal CC calls are left alone).
+
+If `go` is missing, `cc-glm` prints a warning and talks to z.ai directly — calls
+still work, just with CC's defaults.
+
 ## Files
 
 | File | Purpose |
 |---|---|
 | `cc-glm` | The launcher script |
+| `cc-glm-proxy.go` | Optional local proxy that rewrites `temperature` and `max_tokens` (built on the fly) |
 | `claude-code-glm-prompt.md` | System prompt template (GLM-tuned, with `{{MEMORY_DIR}}` placeholder) |
 | `claude-code-with-glm.md` | Detailed write-up of the env vars, why each is needed, and how to verify |
 

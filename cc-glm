@@ -43,8 +43,48 @@ if [ -z "$ZAI_API_KEY" ]; then
 fi
 export ZAI_API_KEY
 
-export ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic
 export ANTHROPIC_AUTH_TOKEN="$ZAI_API_KEY"
+
+# Start a local proxy that rewrites temperature (CC hardcodes 1, we want 0.2)
+# and raises max_tokens from CC's 128000 clamp to z.ai's documented 131072 cap.
+# Neither setting is reachable via CLI/env in Claude Code 2.1.x. If the Go
+# toolchain is missing we skip the proxy and talk to z.ai directly — calls
+# still work, just with CC's defaults.
+UPSTREAM=https://api.z.ai/api/anthropic
+export ANTHROPIC_BASE_URL="$UPSTREAM"
+PROXY_PID=
+if command -v go >/dev/null 2>&1; then
+  PROXY_SRC="$SCRIPT_DIR/cc-glm-proxy.go"
+  PROXY_BIN="$SCRIPT_DIR/.cc-glm-proxy"
+  if [ -r "$PROXY_SRC" ]; then
+    if [ ! -x "$PROXY_BIN" ] || [ "$PROXY_SRC" -nt "$PROXY_BIN" ]; then
+      if ! go build -o "$PROXY_BIN" "$PROXY_SRC" 2>"$SCRIPT_DIR/.cc-glm-proxy.build.log"; then
+        echo "cc-glm: proxy build failed — see $SCRIPT_DIR/.cc-glm-proxy.build.log; continuing without proxy" >&2
+        PROXY_BIN=
+      fi
+    fi
+    if [ -n "$PROXY_BIN" ] && [ -x "$PROXY_BIN" ]; then
+      PROXY_PORT=8765
+      "$PROXY_BIN" -port="$PROXY_PORT" -target="$UPSTREAM" \
+        > "$SCRIPT_DIR/.cc-glm-proxy.log" 2>&1 &
+      PROXY_PID=$!
+      # Wait up to ~1s for the proxy to bind
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        (echo > /dev/tcp/localhost/"$PROXY_PORT") 2>/dev/null && break
+        sleep 0.1
+      done
+      if kill -0 "$PROXY_PID" 2>/dev/null; then
+        export ANTHROPIC_BASE_URL="http://localhost:$PROXY_PORT"
+        trap 'kill "$PROXY_PID" 2>/dev/null' EXIT
+      else
+        echo "cc-glm: proxy failed to start — see $SCRIPT_DIR/.cc-glm-proxy.log; continuing without proxy" >&2
+        PROXY_PID=
+      fi
+    fi
+  fi
+else
+  echo "cc-glm: Go toolchain not on PATH — running without proxy (temperature stays at CC's 1, max_tokens at 128000)" >&2
+fi
 export ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.1
 export ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5.1
 export ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.5-air
@@ -75,4 +115,7 @@ mkdir -p "$MEM_DIR" "$(dirname "$RENDERED_PROMPT")"
 # per-project rendered copy, then hand that file to claude.
 sed "s|{{MEMORY_DIR}}|$MEM_DIR|g" "$SCRIPT_DIR/claude-code-glm-prompt.md" > "$RENDERED_PROMPT"
 
-exec claude --system-prompt-file "$RENDERED_PROMPT" --disallowed-tools Skill "$@"
+# Not exec: we want the EXIT trap above to fire so the proxy gets cleaned up.
+# When no proxy is running, there's nothing to clean up and the extra fork is
+# cheap (one wait(2) away from exec's behavior).
+claude --system-prompt-file "$RENDERED_PROMPT" --disallowed-tools Skill "$@"

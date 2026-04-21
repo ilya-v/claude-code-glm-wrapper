@@ -2,3 +2,6 @@ zai.key
 .env
 .claude/
 *.bak
+.cc-glm-proxy
+.cc-glm-proxy.log
+.cc-glm-proxy.build.log
