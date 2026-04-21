@@ -57,9 +57,12 @@ export ZAI_API_KEY
 
 # Proxy rewrite values. Same env/.env/~/.env lookup as the API key; defaults
 # baked in here. z.ai recommends ~0.2 for deterministic reasoning; 131072 is
-# the documented GLM-5.1 output cap.
+# the documented GLM-5.1 output cap. Thinking defaults to "on" because we
+# otherwise strip CC's thinking block entirely (DISABLE_THINKING=1) and the
+# car-wash-style reasoning tests want GLM to think.
 resolve_setting CC_GLM_TEMPERATURE 0.2
 resolve_setting CC_GLM_MAX_TOKENS  131072
+resolve_setting CC_GLM_THINKING    on
 
 export ANTHROPIC_AUTH_TOKEN="$ZAI_API_KEY"
 
@@ -96,6 +99,7 @@ start_proxy() {
   fi
   "$bin" -port="$PROXY_PORT" -target="$UPSTREAM" \
          -temperature="$CC_GLM_TEMPERATURE" -max-tokens="$CC_GLM_MAX_TOKENS" \
+         -thinking="$CC_GLM_THINKING" \
          > "$log" 2>&1 &
   PROXY_PID=$!
   # Wait for the listening socket (up to PROXY_BIND_TRIES × PROXY_BIND_INTERVAL)

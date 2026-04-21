@@ -1,10 +1,14 @@
 // cc-glm-proxy — local reverse proxy in front of z.ai's Anthropic shim.
-// Rewrites two request body fields on outgoing /v1/messages POSTs:
-//   - temperature      : set to 0.2 (z.ai recommends ~0.2 for deterministic reasoning)
-//   - max_tokens       : raise 128000 -> 131072 (CC clamps unknown models to 128000
-//                        in Ka(); z.ai documents 131072 as the real GLM-5.1 cap).
-// Values smaller than 128000 are left alone (internal CC calls like title
-// generation send much smaller caps and shouldn't be bumped).
+// Rewrites fields on outgoing /v1/messages POSTs:
+//   - temperature  : substitute with the -temperature flag (CC hardcodes 1).
+//   - max_tokens   : substitute when the value equals CC's 128000 clamp
+//                    ceiling (the marker for "main request, not internal
+//                    title-gen"). Raised or capped depending on the flag.
+//   - thinking     : "on" injects {type:"enabled"}; "off" strips the field;
+//                    anything else leaves whatever CC sent alone. CC strips
+//                    its own thinking block when DISABLE_THINKING=1, so the
+//                    only path to server-side reasoning on GLM is to put it
+//                    back here.
 package main
 
 import (
@@ -25,6 +29,7 @@ const (
 	defaultUpstream  = "https://api.z.ai/api/anthropic" // only Anthropic-compat endpoint we currently care about
 	defaultTemp      = 0.2                             // z.ai's own guidance for deterministic reasoning (docs.z.ai/guides/overview/concept-param)
 	defaultMaxTokens = 131072                          // z.ai-documented GLM-5.1 output ceiling
+	defaultThinking  = "on"                            // default: force thinking on. Empty / "auto" would leave CC's choice alone.
 	ccClampCeiling   = 128000                          // value CC's Ka() falls back to for unknown models — the only max_tokens we rewrite
 )
 
@@ -33,6 +38,7 @@ func main() {
 	target := flag.String("target", defaultUpstream, "upstream URL")
 	temp := flag.Float64("temperature", defaultTemp, "value to substitute for body.temperature")
 	maxTok := flag.Int("max-tokens", defaultMaxTokens, "raise body.max_tokens to this when it equals CC's clamp ceiling")
+	thinking := flag.String("thinking", defaultThinking, `"on" injects {type:"enabled"}; "off" strips the field; anything else leaves CC's choice alone`)
 	flag.Parse()
 
 	upstream, err := url.Parse(*target)
@@ -52,7 +58,7 @@ func main() {
 		if err != nil {
 			return
 		}
-		if newBody, changed := rewrite(body, *temp, *maxTok); changed {
+		if newBody, changed := rewrite(body, *temp, *maxTok, *thinking); changed {
 			body = newBody
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
@@ -61,12 +67,12 @@ func main() {
 	}
 
 	addr := "127.0.0.1:" + *port
-	log.Printf("cc-glm-proxy on http://%s -> %s  (temperature=%g, max_tokens-bump=%d)",
-		addr, upstream.String(), *temp, *maxTok)
+	log.Printf("cc-glm-proxy on http://%s -> %s  (temperature=%g, max_tokens-bump=%d, thinking=%s)",
+		addr, upstream.String(), *temp, *maxTok, *thinking)
 	log.Fatal(http.ListenAndServe(addr, proxy))
 }
 
-func rewrite(body []byte, temp float64, maxTok int) ([]byte, bool) {
+func rewrite(body []byte, temp float64, maxTok int, thinking string) ([]byte, bool) {
 	var obj map[string]any
 	if err := json.Unmarshal(body, &obj); err != nil {
 		return body, false
@@ -87,6 +93,22 @@ func rewrite(body []byte, temp float64, maxTok int) ([]byte, bool) {
 		obj["max_tokens"] = float64(maxTok)
 		changed = true
 	}
+	// Thinking: "on" forces {type:"enabled"}; "off" removes any thinking field;
+	// anything else (empty, "auto", ...) leaves whatever CC sent alone.
+	switch strings.ToLower(strings.TrimSpace(thinking)) {
+	case "on", "enabled", "true", "1":
+		want := map[string]any{"type": "enabled"}
+		cur, ok := obj["thinking"].(map[string]any)
+		if !ok || cur["type"] != "enabled" || len(cur) != 1 {
+			obj["thinking"] = want
+			changed = true
+		}
+	case "off", "disabled", "false", "0":
+		if _, has := obj["thinking"]; has {
+			delete(obj, "thinking")
+			changed = true
+		}
+	}
 	if !changed {
 		return body, false
 	}
@@ -94,6 +116,6 @@ func rewrite(body []byte, temp float64, maxTok int) ([]byte, bool) {
 	if err != nil {
 		return body, false
 	}
-	log.Printf("rewrote: temperature=%g max_tokens=%v", temp, obj["max_tokens"])
+	log.Printf("rewrote: temperature=%g max_tokens=%v thinking=%v", temp, obj["max_tokens"], obj["thinking"])
 	return out, true
 }

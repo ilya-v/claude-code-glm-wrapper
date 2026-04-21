@@ -79,20 +79,27 @@ any CLI flag, env var, or settings key (verified by reverse-engineering the bina
   GLM-5.1's actual cap as `131072`.
 
 If the `go` compiler is on your `PATH`, `cc-glm` builds a tiny reverse proxy
-(`cc-glm-proxy.go`, ~90 lines) on first run, launches it at `127.0.0.1:8765`,
-points `ANTHROPIC_BASE_URL` at it, and tears it down on exit. The proxy rewrites
-`temperature` on every `/v1/messages` POST and bumps `max_tokens` from
-`128000` to the configured ceiling (smaller values from internal CC calls are
-left alone).
+(`cc-glm-proxy.go`) on first run, launches it at `127.0.0.1:8765`, points
+`ANTHROPIC_BASE_URL` at it, and tears it down on exit. The proxy rewrites three
+body fields on every `/v1/messages` POST:
+
+- `temperature` — CC hardcodes `1`; we set `0.2` (z.ai's guidance for deterministic reasoning).
+- `max_tokens` — CC's `Ka()` clamps unknown models to `128000`; we bump it to z.ai's documented GLM-5.1 ceiling of `131072`. Smaller values from internal CC calls (title gen etc.) are left alone.
+- `thinking` — CC strips its own thinking block when we set `CLAUDE_CODE_DISABLE_THINKING=1`; the proxy injects `{"type": "enabled"}` back in so GLM actually reasons.
 
 If `go` is missing, `cc-glm` prints a warning and talks to z.ai directly — calls
-still work, just with CC's defaults.
+still work, just with CC's defaults (temperature 1, max_tokens 128000, no thinking).
 
 ### Tuning the proxy
 
-`CC_GLM_TEMPERATURE` and `CC_GLM_MAX_TOKENS` follow the same lookup as
-`ZAI_API_KEY` (env var → `./.env` → `~/.env` → built-in default). Defaults: `0.2`
-and `131072`.
+`CC_GLM_TEMPERATURE`, `CC_GLM_MAX_TOKENS`, and `CC_GLM_THINKING` follow the same
+lookup as `ZAI_API_KEY` (env var → `./.env` → `~/.env` → built-in default):
+
+| Variable | Default | Values |
+|---|---|---|
+| `CC_GLM_TEMPERATURE` | `0.2` | any float z.ai accepts |
+| `CC_GLM_MAX_TOKENS` | `131072` | positive int up to z.ai's cap |
+| `CC_GLM_THINKING` | `on` | `on` (inject `{type:"enabled"}`), `off` (strip the field), anything else (`auto`, empty, ...) leaves whatever CC sent alone |
 
 ```bash
 CC_GLM_TEMPERATURE=0.1 /path/to/cc-glm              # one-shot override
