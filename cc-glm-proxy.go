@@ -4,11 +4,13 @@
 //   - max_tokens   : substitute when the value equals CC's 128000 clamp
 //                    ceiling (the marker for "main request, not internal
 //                    title-gen"). Raised or capped depending on the flag.
-//   - thinking     : "on" injects {type:"enabled"}; "off" strips the field;
-//                    anything else leaves whatever CC sent alone. CC strips
-//                    its own thinking block when DISABLE_THINKING=1, so the
-//                    only path to server-side reasoning on GLM is to put it
-//                    back here.
+//   - thinking     : "on" injects {type:"enabled", clear_thinking:false}
+//                    (z.ai's "Preserved Thinking" — reasoning carries across
+//                    multi-turn conversations, important for coding agents);
+//                    "off" strips the field; anything else leaves whatever
+//                    CC sent alone. CC strips its own thinking block when
+//                    DISABLE_THINKING=1, so the only path to server-side
+//                    reasoning on GLM is to put it back here.
 package main
 
 import (
@@ -93,13 +95,20 @@ func rewrite(body []byte, temp float64, maxTok int, thinking string) ([]byte, bo
 		obj["max_tokens"] = float64(maxTok)
 		changed = true
 	}
-	// Thinking: "on" forces {type:"enabled"}; "off" removes any thinking field;
-	// anything else (empty, "auto", ...) leaves whatever CC sent alone.
+	// Thinking: "on" forces {type:"enabled", clear_thinking:false}; "off"
+	// removes any thinking field; anything else (empty, "auto", ...) leaves
+	// whatever CC sent alone.
+	//
+	// clear_thinking:false is a z.ai-specific extension (docs.z.ai/guides/
+	// capabilities/thinking-mode) — "Preserved Thinking", so reasoning blocks
+	// persist across multi-turn conversations. Important for coding agents:
+	// without it GLM re-derives its chain-of-thought every turn, which wastes
+	// tokens and loses context.
 	switch strings.ToLower(strings.TrimSpace(thinking)) {
 	case "on", "enabled", "true", "1":
-		want := map[string]any{"type": "enabled"}
+		want := map[string]any{"type": "enabled", "clear_thinking": false}
 		cur, ok := obj["thinking"].(map[string]any)
-		if !ok || cur["type"] != "enabled" || len(cur) != 1 {
+		if !ok || cur["type"] != "enabled" || cur["clear_thinking"] != false || len(cur) != 2 {
 			obj["thinking"] = want
 			changed = true
 		}

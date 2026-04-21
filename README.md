@@ -85,7 +85,7 @@ body fields on every `/v1/messages` POST:
 
 - `temperature` — CC hardcodes `1`; we set `0.2` (z.ai's guidance for deterministic reasoning).
 - `max_tokens` — CC's `Ka()` clamps unknown models to `128000`; we bump it to z.ai's documented GLM-5.1 ceiling of `131072`. Smaller values from internal CC calls (title gen etc.) are left alone.
-- `thinking` — CC strips its own thinking block when we set `CLAUDE_CODE_DISABLE_THINKING=1`; the proxy injects `{"type": "enabled"}` back in so GLM actually reasons.
+- `thinking` — CC strips its own thinking block when we set `CLAUDE_CODE_DISABLE_THINKING=1`; the proxy injects `{"type": "enabled", "clear_thinking": false}` back in so GLM actually reasons. `clear_thinking: false` is a [z.ai-specific extension](https://docs.z.ai/guides/capabilities/thinking-mode) — "Preserved Thinking" — so reasoning blocks carry across multi-turn conversations instead of being re-derived every turn.
 
 If `go` is missing, `cc-glm` prints a warning and talks to z.ai directly — calls
 still work, just with CC's defaults (temperature 1, max_tokens 128000, no thinking).
